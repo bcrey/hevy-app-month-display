@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#F5F6F8" />
+  <title>Workout Calendar</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🏋️</text></svg>">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #F5F6F8;
+      min-height: 100dvh;
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo, useEffect, useCallback } = React;
+
+    // ── Emoji helpers ──
+    function extractEmoji(title) {
+      try {
+        const segments = [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(title)];
+        const emojis = [];
+        for (const seg of segments) {
+          const ch = seg.segment;
+          if (ch === "+" || ch === " ") continue;
+          if (/\p{Emoji_Presentation}/u.test(ch) || /[\u{1F300}-\u{1FAFF}]/u.test(ch)) {
+            emojis.push(ch);
+          } else break;
+        }
+        return emojis;
+      } catch { return []; }
+    }
+
+    function extractName(title) {
+      try {
+        const segments = [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(title)];
+        let textStart = 0;
+        for (let i = 0; i < segments.length; i++) {
+          const ch = segments[i].segment;
+          if (ch === "+" || ch === " ") { textStart = i + 1; continue; }
+          if (/\p{Emoji_Presentation}/u.test(ch) || /[\u{1F300}-\u{1FAFF}]/u.test(ch)) {
+            textStart = i + 1;
+          } else break;
+        }
+        return segments.slice(textStart).map(s => s.segment).join("").trim();
+      } catch { return title; }
+    }
+
+    // ── Constants ──
+    const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
+
+    const TYPE_COLORS = {
+      "👟": { bg: "#E8F5E9", border: "#66BB6A", label: "Ankle/Rehab" },
+      "💥": { bg: "#FFF3E0", border: "#FF9800", label: "HIIT" },
+      "💪": { bg: "#FFF3E0", border: "#FF9800", label: "Strength" },
+      "🏊": { bg: "#E3F2FD", border: "#42A5F5", label: "Swim" },
+      "🧘": { bg: "#F3E5F5", border: "#AB47BC", label: "Yoga" },
+      "🧍": { bg: "#EFEBE9", border: "#8D6E63", label: "McGill/Back" },
+      "🙌": { bg: "#FFFDE7", border: "#FDD835", label: "Dead Hang" },
+      "👣": { bg: "#E0F7FA", border: "#26C6DA", label: "Jump Rope" },
+      "🦿": { bg: "#FCE4EC", border: "#EC407A", label: "Nordic" },
+      "🦵": { bg: "#FCE4EC", border: "#EC407A", label: "Legs" },
+    };
+
+    function getTypeColor(emoji) {
+      for (const [key, val] of Object.entries(TYPE_COLORS)) {
+        if (emoji && emoji.includes(key)) return val;
+      }
+      return { bg: "#F5F5F5", border: "#BDBDBD", label: "Workout" };
+    }
+
+    function buildMonthGrid(year, month) {
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const weeks = [];
+      let week = new Array(firstDay).fill(null);
+      for (let d = 1; d <= daysInMonth; d++) {
+        week.push(d);
+        if (week.length === 7) { weeks.push(week); week = []; }
+      }
+      if (week.length > 0) {
+        while (week.length < 7) week.push(null);
+        weeks.push(week);
+      }
+      return { daysInMonth, weeks };
+    }
+
+    function parseMonthWorkouts(rawData, year, month, daysInMonth) {
+      const result = {};
+      for (let d = 1; d <= daysInMonth; d++) {
+        const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        if (rawData[key]) {
+          result[d] = rawData[key].map(title => ({
+            title, emojis: extractEmoji(title), name: extractName(title),
+          }));
+        }
+      }
+      return result;
+    }
+
+    // ── Month Card ──
+    function MonthCard({ monthKey, rawData, selectedKey, onSelect }) {
+      const [yearStr, monthStr] = monthKey.split("-");
+      const year = parseInt(yearStr);
+      const month = parseInt(monthStr) - 1;
+      const { daysInMonth, weeks } = buildMonthGrid(year, month);
+      const monthName = new Date(year, month, 1).toLocaleString("default", { month: "short" });
+      const monthWorkouts = useMemo(
+        () => parseMonthWorkouts(rawData, year, month, daysInMonth),
+        [rawData, year, month, daysInMonth]
+      );
+
+      const today = new Date();
+      const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+      const todayDate = today.getDate();
+
+      let workoutDays = 0, totalWorkouts = 0;
+      Object.values(monthWorkouts).forEach(w => { workoutDays++; totalWorkouts += w.length; });
+
+      const selectedDay = selectedKey && selectedKey.startsWith(monthKey + "-")
+        ? parseInt(selectedKey.split("-")[2]) : null;
+
+      return (
+        <div style={{
+          background: "white", borderRadius: 16,
+          boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+          overflow: "hidden",
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: "14px 16px 8px",
+            display: "flex", justifyContent: "space-between", alignItems: "baseline",
+          }}>
+            <div>
+              <span style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a" }}>{monthName}</span>
+              <span style={{ fontSize: 18, fontWeight: 300, color: "#999", marginLeft: 6 }}>{year}</span>
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <span style={{ fontSize: 11, color: "#999" }}>
+                <strong style={{ color: "#2979FF" }}>{workoutDays}</strong> days
+              </span>
+              <span style={{ fontSize: 11, color: "#999" }}>
+                <strong style={{ color: "#2979FF" }}>{totalWorkouts}</strong> workouts
+              </span>
+            </div>
+          </div>
+
+          {/* Day headers */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", padding: "0 6px 2px" }}>
+            {DAYS.map((d, i) => (
+              <div key={i} style={{
+                textAlign: "center", fontSize: 10, fontWeight: 600, color: "#C0C0C0", padding: "2px 0",
+              }}>{d}</div>
+            ))}
+          </div>
+
+          {/* Grid */}
+          <div style={{ padding: "0 6px 6px" }}>
+            {weeks.map((week, wi) => (
+              <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+                {week.map((day, di) => {
+                  if (!day) return <div key={di} />;
+                  const workouts = monthWorkouts[day] || [];
+                  const hasWorkout = workouts.length > 0;
+                  const isToday = isCurrentMonth && day === todayDate;
+                  const isSelected = selectedDay === day;
+                  const dayKey = `${monthKey}-${String(day).padStart(2, "0")}`;
+
+                  const dayEmojis = [];
+                  workouts.forEach(w => w.emojis.forEach(e => {
+                    if (!dayEmojis.includes(e)) dayEmojis.push(e);
+                  }));
+
+                  return (
+                    <div key={di}
+                      onClick={() => hasWorkout && onSelect(isSelected ? null : dayKey)}
+                      style={{
+                        display: "flex", flexDirection: "column", alignItems: "center",
+                        padding: "4px 1px 6px",
+                        cursor: hasWorkout ? "pointer" : "default",
+                        borderRadius: 10,
+                        background: isSelected ? "#E3F2FD" : "transparent",
+                        transition: "background 0.15s",
+                        minHeight: 58,
+                      }}>
+                      <div style={{
+                        width: 30, height: 30, borderRadius: "50%",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 13, fontWeight: hasWorkout ? 700 : 400,
+                        color: hasWorkout ? "white" : isToday ? "#2979FF" : "#777",
+                        background: hasWorkout
+                          ? isToday ? "linear-gradient(135deg, #2979FF, #1565C0)" : "#4A9FFF"
+                          : isToday ? "#E3F2FD" : "transparent",
+                        boxShadow: hasWorkout ? "0 1px 4px rgba(41,121,255,0.25)" : "none",
+                        position: "relative",
+                      }}>
+                        {day}
+                        {workouts.length > 1 && (
+                          <div style={{
+                            position: "absolute", top: -2, right: -4,
+                            width: 14, height: 14, borderRadius: "50%",
+                            background: "#FF6B35", color: "white",
+                            fontSize: 8, fontWeight: 800,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            border: "2px solid white",
+                          }}>{workouts.length}</div>
+                        )}
+                      </div>
+                      {dayEmojis.length > 0 && (
+                        <div style={{
+                          display: "flex", flexWrap: "wrap", justifyContent: "center",
+                          gap: 0, marginTop: 2, maxWidth: 44, lineHeight: 1,
+                        }}>
+                          {dayEmojis.slice(0, 4).map((e, i) => (
+                            <span key={i} style={{ fontSize: 10 }}>{e}</span>
+                          ))}
+                          {dayEmojis.length > 4 && (
+                            <span style={{ fontSize: 8, color: "#999" }}>+{dayEmojis.length - 4}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          {/* Expanded detail */}
+          {selectedDay && monthWorkouts[selectedDay] && (
+            <div style={{ borderTop: "1px solid #f0f0f0", animation: "slideUp 0.2s ease" }}>
+              <div style={{
+                padding: "10px 14px 6px",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>
+                  {monthName} {selectedDay}
+                </span>
+                <span style={{
+                  fontSize: 10, fontWeight: 600, color: "#2979FF",
+                  background: "#E3F2FD", padding: "2px 8px", borderRadius: 20,
+                }}>
+                  {monthWorkouts[selectedDay].length} workout{monthWorkouts[selectedDay].length > 1 ? "s" : ""}
+                </span>
+              </div>
+              {monthWorkouts[selectedDay].map((w, i) => {
+                const tc = w.emojis.length > 0 ? getTypeColor(w.emojis[0]) : { bg: "#F5F5F5", border: "#BDBDBD" };
+                return (
+                  <div key={i} style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "8px 14px",
+                    borderTop: i > 0 ? "1px solid #f8f8f8" : "none",
+                  }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 8,
+                      background: tc.bg, border: `2px solid ${tc.border}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 15, flexShrink: 0,
+                    }}>{w.emojis[0] || "🏋️"}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 13, fontWeight: 600, color: "#1a1a1a",
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                      }}>{w.name || w.title}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ height: 8 }} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Loading ──
+    function LoadingScreen() {
+      return (
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center",
+          justifyContent: "center", minHeight: "100dvh", gap: 16,
+        }}>
+          <div style={{
+            width: 40, height: 40, border: "3px solid #E3F2FD",
+            borderTopColor: "#2979FF", borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+          }} />
+          <div style={{ fontSize: 14, color: "#999" }}>Loading workouts from Drive...</div>
+        </div>
+      );
+    }
+
+    // ── Error ──
+    function ErrorScreen({ error, onRetry }) {
+      return (
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center",
+          justifyContent: "center", minHeight: "100dvh", gap: 16, padding: 32, textAlign: "center",
+        }}>
+          <div style={{ fontSize: 48 }}>😵</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "#333" }}>Couldn't load workouts</div>
+          <div style={{
+            fontSize: 13, color: "#999", maxWidth: 320, lineHeight: 1.5,
+            background: "#f5f5f5", padding: "12px 16px", borderRadius: 10,
+            fontFamily: "monospace", wordBreak: "break-all",
+          }}>{error}</div>
+          <button onClick={onRetry} style={{
+            padding: "10px 24px", background: "#2979FF", color: "white",
+            border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer",
+          }}>Retry</button>
+        </div>
+      );
+    }
+
+    const TIME_FILTERS = [
+      { label: "This Month", value: "1" },
+      { label: "2 Months", value: "2" },
+      { label: "6 Months", value: "6" },
+      { label: "All Time", value: "all" },
+    ];
+
+    // ── App ──
+    function App() {
+      const [rawData, setRawData] = useState(null);
+      const [meta, setMeta] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [selectedKey, setSelectedKey] = useState(null);
+      const [timeFilter, setTimeFilter] = useState("2");
+
+      const fetchData = useCallback(async (refresh = false) => {
+        setLoading(true);
+        setError(null);
+        try {
+          const url = refresh ? "/api/workouts?refresh=true" : "/api/workouts";
+          const res = await fetch(url);
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || `HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          setRawData(data.workouts);
+          setMeta(data.meta);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      useEffect(() => { fetchData(); }, [fetchData]);
+
+      const availableMonths = useMemo(() => {
+        if (!rawData) return [];
+        const months = new Set();
+        Object.keys(rawData).forEach(date => months.add(date.substring(0, 7)));
+        return [...months].sort();
+      }, [rawData]);
+
+      const filteredMonths = useMemo(() => {
+        if (timeFilter === "all") return availableMonths;
+        const n = parseInt(timeFilter);
+        const now = new Date();
+        const cutoffYear = now.getFullYear();
+        const cutoffMonth = now.getMonth() - (n - 1); // inclusive of current month
+        const cutoff = new Date(cutoffYear, cutoffMonth, 1);
+        const cutoffKey = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}`;
+        return availableMonths.filter(mk => mk >= cutoffKey);
+      }, [availableMonths, timeFilter]);
+
+      const allLegendEmojis = useMemo(() => {
+        if (!rawData) return [];
+        const seen = new Set();
+        const result = [];
+        // Only compute from filtered months
+        const filteredKeys = new Set(filteredMonths);
+        Object.entries(rawData).forEach(([date, titles]) => {
+          if (!filteredKeys.has(date.substring(0, 7))) return;
+          titles.forEach(title => {
+            extractEmoji(title).forEach(e => {
+              for (const key of Object.keys(TYPE_COLORS)) {
+                if (e.includes(key) && !seen.has(key)) { seen.add(key); result.push(key); }
+              }
+            });
+          });
+        });
+        return result;
+      }, [rawData, filteredMonths]);
+
+      const globalStats = useMemo(() => {
+        if (!rawData) return { days: 0, workouts: 0, multiDays: 0 };
+        let days = 0, workouts = 0, multiDays = 0;
+        const filteredKeys = new Set(filteredMonths);
+        Object.entries(rawData).forEach(([date, titles]) => {
+          if (!filteredKeys.has(date.substring(0, 7))) return;
+          days++; workouts += titles.length;
+          if (titles.length > 1) multiDays++;
+        });
+        return { days, workouts, multiDays };
+      }, [rawData, filteredMonths]);
+
+      if (loading) return <LoadingScreen />;
+      if (error) return <ErrorScreen error={error} onRetry={() => fetchData(true)} />;
+      if (!rawData || availableMonths.length === 0) {
+        return <ErrorScreen error="No workout data found" onRetry={() => fetchData(true)} />;
+      }
+
+      return (
+        <div style={{ minHeight: "100dvh", padding: "20px 24px 32px" }}>
+
+          {/* Top bar */}
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            marginBottom: 16, flexWrap: "wrap", gap: 12,
+          }}>
+            <div>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1a1a1a", letterSpacing: "-0.5px" }}>
+                Workout Calendar
+              </h1>
+              {meta && (
+                <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
+                  {meta.fileName} · uploaded {new Date(meta.fileDate).toLocaleDateString()}
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[
+                  { label: "days", value: globalStats.days },
+                  { label: "workouts", value: globalStats.workouts },
+                  { label: "multi", value: globalStats.multiDays },
+                ].map((s, i) => (
+                  <div key={i} style={{
+                    background: "white", borderRadius: 20, padding: "4px 12px",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                    fontSize: 11, color: "#666", whiteSpace: "nowrap",
+                  }}>
+                    <strong style={{ color: "#2979FF" }}>{s.value}</strong> {s.label}
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => fetchData(true)} style={{
+                background: "white", color: "#2979FF", border: "1px solid #E3E8FF",
+                borderRadius: 8, padding: "6px 14px", fontSize: 12,
+                fontWeight: 600, cursor: "pointer",
+              }}>↻ Refresh</button>
+            </div>
+          </div>
+
+          {/* Time filter */}
+          <div style={{
+            display: "inline-flex", background: "white", borderRadius: 10,
+            padding: 3, boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+            marginBottom: 16,
+          }}>
+            {TIME_FILTERS.map(f => (
+              <button key={f.value} onClick={() => { setTimeFilter(f.value); setSelectedKey(null); }}
+                style={{
+                  padding: "7px 16px", fontSize: 12, fontWeight: 600,
+                  border: "none", borderRadius: 8, cursor: "pointer",
+                  background: timeFilter === f.value ? "#2979FF" : "transparent",
+                  color: timeFilter === f.value ? "white" : "#888",
+                  transition: "all 0.15s ease",
+                  whiteSpace: "nowrap",
+                }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Legend */}
+          {allLegendEmojis.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20 }}>
+              {allLegendEmojis.map(emoji => {
+                const c = TYPE_COLORS[emoji];
+                return (
+                  <div key={emoji} style={{
+                    display: "flex", alignItems: "center", gap: 5,
+                    padding: "3px 10px 3px 5px",
+                    background: "white", borderRadius: 20,
+                    border: `1px solid ${c.border}40`, fontSize: 11,
+                  }}>
+                    <span style={{ fontSize: 13 }}>{emoji}</span>
+                    <span style={{ fontWeight: 500, color: "#666" }}>{c.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Month grid: auto-fill responsive */}
+          {filteredMonths.length === 0 ? (
+            <div style={{
+              textAlign: "center", padding: "48px 24px", color: "#999", fontSize: 14,
+            }}>
+              No workouts in this time range. Try a wider filter.
+            </div>
+          ) : (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+            gap: 16,
+            alignItems: "start",
+          }}>
+            {filteredMonths.map(mk => (
+              <MonthCard
+                key={mk}
+                monthKey={mk}
+                rawData={rawData}
+                selectedKey={selectedKey}
+                onSelect={setSelectedKey}
+              />
+            ))}
+          </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
