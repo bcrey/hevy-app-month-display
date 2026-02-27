@@ -2,7 +2,5 @@
   "name": "hevy-workout-calendar",
   "version": "1.0.0",
   "private": true,
-  "dependencies": {
-    "csv-parse": "^5.5.0"
-  }
+  "dependencies": {}
 }

@@ -1,8 +1,55 @@
-import { parse } from "csv-parse/sync";
-
 // In-memory cache (persists across warm invocations)
 let cache = { data: null, timestamp: 0 };
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Simple CSV parser — handles quoted fields with commas/newlines
+function parseCSV(text) {
+  const rows = [];
+  let current = "";
+  let inQuotes = false;
+  let fields = [];
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ",") {
+        fields.push(current);
+        current = "";
+      } else if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
+        fields.push(current);
+        current = "";
+        if (fields.some(f => f.trim())) rows.push(fields);
+        fields = [];
+        if (ch === "\r") i++;
+      } else {
+        current += ch;
+      }
+    }
+  }
+  if (current || fields.length) {
+    fields.push(current);
+    if (fields.some(f => f.trim())) rows.push(fields);
+  }
+
+  if (rows.length < 2) return [];
+  const headers = rows[0];
+  return rows.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h.trim()] = (row[i] || "").trim(); });
+    return obj;
+  });
+}
 
 export default async function handler(req, res) {
   // CORS headers
@@ -67,11 +114,7 @@ export default async function handler(req, res) {
     const csvText = await dlRes.text();
 
     // Step 3: Parse CSV → workouts by date
-    const records = parse(csvText, {
-      columns: true,
-      skip_empty_lines: true,
-      relax_column_count: true,
-    });
+    const records = parseCSV(csvText);
 
     const workoutsByDate = {};
     for (const row of records) {
