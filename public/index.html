@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#F5F6F8" />
+  <meta name="theme-color" content="#F5F6F8" id="themeColorMeta" />
   <title>Workout Calendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🏋️</text></svg>">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -16,6 +16,7 @@
       font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: #F5F6F8;
       min-height: 100dvh;
+      transition: background 0.2s;
     }
     @keyframes slideUp {
       from { opacity: 0; transform: translateY(8px); }
@@ -30,6 +31,70 @@
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useMemo, useEffect, useCallback } = React;
+
+    // ── Themes ──
+    const THEMES = {
+      light: {
+        appBg: "#F5F6F8",
+        themeColor: "#F5F6F8",
+        cardBg: "white",
+        cardShadow: "0 1px 4px rgba(0,0,0,0.06)",
+        titleColor: "#1a1a1a",
+        metaColor: "#999",
+        dayHeaderColor: "#C0C0C0",
+        emptyDayColor: "#777",
+        todayNoWorkoutText: "#2979FF",
+        todayNoWorkoutBg: "#E3F2FD",
+        selectedDayBg: "#E3F2FD",
+        detailBorder: "#f0f0f0",
+        detailRowBorder: "#f8f8f8",
+        workoutNameColor: "#1a1a1a",
+        pillBg: "white",
+        pillText: "#666",
+        pillShadow: "0 1px 3px rgba(0,0,0,0.06)",
+        filterBarBg: "white",
+        inactiveFilterText: "#888",
+        legendBg: "white",
+        legendText: "#666",
+        errorDetailBg: "#f5f5f5",
+        errorText: "#333",
+        spinnerBorder: "#E3F2FD",
+        refreshBg: "white",
+        refreshText: "#2979FF",
+        refreshBorder: "#E3E8FF",
+        emptyStateText: "#999",
+      },
+      dark: {
+        appBg: "#111111",
+        themeColor: "#111111",
+        cardBg: "#1C1C1E",
+        cardShadow: "0 1px 4px rgba(0,0,0,0.4)",
+        titleColor: "#FFFFFF",
+        metaColor: "#666",
+        dayHeaderColor: "#444",
+        emptyDayColor: "#555",
+        todayNoWorkoutText: "#4A9FFF",
+        todayNoWorkoutBg: "#1A2840",
+        selectedDayBg: "#1A2840",
+        detailBorder: "#2C2C2E",
+        detailRowBorder: "#2C2C2E",
+        workoutNameColor: "#E5E5E7",
+        pillBg: "#1C1C1E",
+        pillText: "#999",
+        pillShadow: "0 1px 3px rgba(0,0,0,0.3)",
+        filterBarBg: "#1C1C1E",
+        inactiveFilterText: "#666",
+        legendBg: "#1C1C1E",
+        legendText: "#999",
+        errorDetailBg: "#2C2C2E",
+        errorText: "#CCC",
+        spinnerBorder: "#1A2840",
+        refreshBg: "#1C1C1E",
+        refreshText: "#4A9FFF",
+        refreshBorder: "#2C3A5A",
+        emptyStateText: "#666",
+      },
+    };
 
     // ── Emoji helpers ──
     function extractEmoji(title) {
@@ -115,7 +180,7 @@
     }
 
     // ── Month Card ──
-    function MonthCard({ monthKey, rawData, selectedKey, onSelect }) {
+    function MonthCard({ monthKey, rawData, selectedKey, onSelect, theme, exerciseFilters }) {
       const [yearStr, monthStr] = monthKey.split("-");
       const year = parseInt(yearStr);
       const month = parseInt(monthStr) - 1;
@@ -126,21 +191,34 @@
         [rawData, year, month, daysInMonth]
       );
 
+      const filteredMonthWorkouts = useMemo(() => {
+        if (!exerciseFilters || exerciseFilters.size === 0) return monthWorkouts;
+        const result = {};
+        for (const [day, workouts] of Object.entries(monthWorkouts)) {
+          const filtered = workouts.filter(w =>
+            w.emojis.some(e => { for (const key of exerciseFilters) { if (e.includes(key)) return true; } return false; })
+          );
+          if (filtered.length > 0) result[day] = filtered;
+        }
+        return result;
+      }, [monthWorkouts, exerciseFilters]);
+
       const today = new Date();
       const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
       const todayDate = today.getDate();
 
       let workoutDays = 0, totalWorkouts = 0;
-      Object.values(monthWorkouts).forEach(w => { workoutDays++; totalWorkouts += w.length; });
+      Object.values(filteredMonthWorkouts).forEach(w => { workoutDays++; totalWorkouts += w.length; });
 
       const selectedDay = selectedKey && selectedKey.startsWith(monthKey + "-")
         ? parseInt(selectedKey.split("-")[2]) : null;
 
       return (
         <div style={{
-          background: "white", borderRadius: 16,
-          boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+          background: theme.cardBg, borderRadius: 16,
+          boxShadow: theme.cardShadow,
           overflow: "hidden",
+          transition: "background 0.2s, box-shadow 0.2s",
         }}>
           {/* Header */}
           <div style={{
@@ -148,14 +226,14 @@
             display: "flex", justifyContent: "space-between", alignItems: "baseline",
           }}>
             <div>
-              <span style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a" }}>{monthName}</span>
-              <span style={{ fontSize: 18, fontWeight: 300, color: "#999", marginLeft: 6 }}>{year}</span>
+              <span style={{ fontSize: 18, fontWeight: 700, color: theme.titleColor }}>{monthName}</span>
+              <span style={{ fontSize: 18, fontWeight: 300, color: theme.metaColor, marginLeft: 6 }}>{year}</span>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <span style={{ fontSize: 11, color: "#999" }}>
+              <span style={{ fontSize: 11, color: theme.metaColor }}>
                 <strong style={{ color: "#2979FF" }}>{workoutDays}</strong> days
               </span>
-              <span style={{ fontSize: 11, color: "#999" }}>
+              <span style={{ fontSize: 11, color: theme.metaColor }}>
                 <strong style={{ color: "#2979FF" }}>{totalWorkouts}</strong> workouts
               </span>
             </div>
@@ -165,7 +243,7 @@
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", padding: "0 6px 2px" }}>
             {DAYS.map((d, i) => (
               <div key={i} style={{
-                textAlign: "center", fontSize: 10, fontWeight: 600, color: "#C0C0C0", padding: "2px 0",
+                textAlign: "center", fontSize: 10, fontWeight: 600, color: theme.dayHeaderColor, padding: "2px 0",
               }}>{d}</div>
             ))}
           </div>
@@ -176,7 +254,7 @@
               <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
                 {week.map((day, di) => {
                   if (!day) return <div key={di} />;
-                  const workouts = monthWorkouts[day] || [];
+                  const workouts = filteredMonthWorkouts[day] || [];
                   const hasWorkout = workouts.length > 0;
                   const isToday = isCurrentMonth && day === todayDate;
                   const isSelected = selectedDay === day;
@@ -195,7 +273,7 @@
                         padding: "4px 1px 6px",
                         cursor: hasWorkout ? "pointer" : "default",
                         borderRadius: 10,
-                        background: isSelected ? "#E3F2FD" : "transparent",
+                        background: isSelected ? theme.selectedDayBg : "transparent",
                         transition: "background 0.15s",
                         minHeight: 58,
                       }}>
@@ -203,10 +281,10 @@
                         width: 30, height: 30, borderRadius: "50%",
                         display: "flex", alignItems: "center", justifyContent: "center",
                         fontSize: 13, fontWeight: hasWorkout ? 700 : 400,
-                        color: hasWorkout ? "white" : isToday ? "#2979FF" : "#777",
+                        color: hasWorkout ? "white" : isToday ? theme.todayNoWorkoutText : theme.emptyDayColor,
                         background: hasWorkout
                           ? isToday ? "linear-gradient(135deg, #2979FF, #1565C0)" : "#4A9FFF"
-                          : isToday ? "#E3F2FD" : "transparent",
+                          : isToday ? theme.todayNoWorkoutBg : "transparent",
                         boxShadow: hasWorkout ? "0 1px 4px rgba(41,121,255,0.25)" : "none",
                         position: "relative",
                       }}>
@@ -231,7 +309,7 @@
                             <span key={i} style={{ fontSize: 10 }}>{e}</span>
                           ))}
                           {dayEmojis.length > 4 && (
-                            <span style={{ fontSize: 8, color: "#999" }}>+{dayEmojis.length - 4}</span>
+                            <span style={{ fontSize: 8, color: theme.metaColor }}>+{dayEmojis.length - 4}</span>
                           )}
                         </div>
                       )}
@@ -243,29 +321,29 @@
           </div>
 
           {/* Expanded detail */}
-          {selectedDay && monthWorkouts[selectedDay] && (
-            <div style={{ borderTop: "1px solid #f0f0f0", animation: "slideUp 0.2s ease" }}>
+          {selectedDay && filteredMonthWorkouts[selectedDay] && (
+            <div style={{ borderTop: `1px solid ${theme.detailBorder}`, animation: "slideUp 0.2s ease" }}>
               <div style={{
                 padding: "10px 14px 6px",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
               }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: theme.titleColor }}>
                   {monthName} {selectedDay}
                 </span>
                 <span style={{
                   fontSize: 10, fontWeight: 600, color: "#2979FF",
-                  background: "#E3F2FD", padding: "2px 8px", borderRadius: 20,
+                  background: theme.selectedDayBg, padding: "2px 8px", borderRadius: 20,
                 }}>
-                  {monthWorkouts[selectedDay].length} workout{monthWorkouts[selectedDay].length > 1 ? "s" : ""}
+                  {filteredMonthWorkouts[selectedDay].length} workout{filteredMonthWorkouts[selectedDay].length > 1 ? "s" : ""}
                 </span>
               </div>
-              {monthWorkouts[selectedDay].map((w, i) => {
+              {filteredMonthWorkouts[selectedDay].map((w, i) => {
                 const tc = w.emojis.length > 0 ? getTypeColor(w.emojis[0]) : { bg: "#F5F5F5", border: "#BDBDBD" };
                 return (
                   <div key={i} style={{
                     display: "flex", alignItems: "center", gap: 10,
                     padding: "8px 14px",
-                    borderTop: i > 0 ? "1px solid #f8f8f8" : "none",
+                    borderTop: i > 0 ? `1px solid ${theme.detailRowBorder}` : "none",
                   }}>
                     <div style={{
                       width: 32, height: 32, borderRadius: 8,
@@ -275,7 +353,7 @@
                     }}>{w.emojis[0] || "🏋️"}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{
-                        fontSize: 13, fontWeight: 600, color: "#1a1a1a",
+                        fontSize: 13, fontWeight: 600, color: theme.workoutNameColor,
                         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                       }}>{w.name || w.title}</div>
                     </div>
@@ -290,34 +368,34 @@
     }
 
     // ── Loading ──
-    function LoadingScreen() {
+    function LoadingScreen({ theme }) {
       return (
         <div style={{
           display: "flex", flexDirection: "column", alignItems: "center",
           justifyContent: "center", minHeight: "100dvh", gap: 16,
         }}>
           <div style={{
-            width: 40, height: 40, border: "3px solid #E3F2FD",
+            width: 40, height: 40, border: `3px solid ${theme.spinnerBorder}`,
             borderTopColor: "#2979FF", borderRadius: "50%",
             animation: "spin 0.8s linear infinite",
           }} />
-          <div style={{ fontSize: 14, color: "#999" }}>Loading workouts from Drive...</div>
+          <div style={{ fontSize: 14, color: theme.metaColor }}>Loading workouts from Drive...</div>
         </div>
       );
     }
 
     // ── Error ──
-    function ErrorScreen({ error, onRetry }) {
+    function ErrorScreen({ error, onRetry, theme }) {
       return (
         <div style={{
           display: "flex", flexDirection: "column", alignItems: "center",
           justifyContent: "center", minHeight: "100dvh", gap: 16, padding: 32, textAlign: "center",
         }}>
           <div style={{ fontSize: 48 }}>😵</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: "#333" }}>Couldn't load workouts</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: theme.errorText }}>Couldn't load workouts</div>
           <div style={{
-            fontSize: 13, color: "#999", maxWidth: 320, lineHeight: 1.5,
-            background: "#f5f5f5", padding: "12px 16px", borderRadius: 10,
+            fontSize: 13, color: theme.metaColor, maxWidth: 320, lineHeight: 1.5,
+            background: theme.errorDetailBg, padding: "12px 16px", borderRadius: 10,
             fontFamily: "monospace", wordBreak: "break-all",
           }}>{error}</div>
           <button onClick={onRetry} style={{
@@ -343,6 +421,24 @@
       const [error, setError] = useState(null);
       const [selectedKey, setSelectedKey] = useState(null);
       const [timeFilter, setTimeFilter] = useState("2");
+      const [darkMode, setDarkMode] = useState(false);
+      const [exerciseFilters, setExerciseFilters] = useState(new Set());
+
+      const toggleExerciseFilter = useCallback((emoji) => {
+        setExerciseFilters(prev => {
+          const next = new Set(prev);
+          if (next.has(emoji)) next.delete(emoji); else next.add(emoji);
+          return next;
+        });
+        setSelectedKey(null);
+      }, []);
+
+      const theme = darkMode ? THEMES.dark : THEMES.light;
+
+      useEffect(() => {
+        document.body.style.background = theme.appBg;
+        document.getElementById("themeColorMeta").content = theme.themeColor;
+      }, [darkMode]);
 
       const fetchData = useCallback(async (refresh = false) => {
         setLoading(true);
@@ -389,7 +485,6 @@
         if (!rawData) return [];
         const seen = new Set();
         const result = [];
-        // Only compute from filtered months
         const filteredKeys = new Set(filteredMonths);
         Object.entries(rawData).forEach(([date, titles]) => {
           if (!filteredKeys.has(date.substring(0, 7))) return;
@@ -416,10 +511,10 @@
         return { days, workouts, multiDays };
       }, [rawData, filteredMonths]);
 
-      if (loading) return <LoadingScreen />;
-      if (error) return <ErrorScreen error={error} onRetry={() => fetchData(true)} />;
+      if (loading) return <LoadingScreen theme={theme} />;
+      if (error) return <ErrorScreen error={error} onRetry={() => fetchData(true)} theme={theme} />;
       if (!rawData || availableMonths.length === 0) {
-        return <ErrorScreen error="No workout data found" onRetry={() => fetchData(true)} />;
+        return <ErrorScreen error="No workout data found" onRetry={() => fetchData(true)} theme={theme} />;
       }
 
       return (
@@ -431,16 +526,16 @@
             marginBottom: 16, flexWrap: "wrap", gap: 12,
           }}>
             <div>
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1a1a1a", letterSpacing: "-0.5px" }}>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: theme.titleColor, letterSpacing: "-0.5px" }}>
                 Workout Calendar
               </h1>
               {meta && (
-                <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: theme.metaColor, marginTop: 2 }}>
                   {meta.fileName} · uploaded {new Date(meta.fileDate).toLocaleDateString()}
                 </div>
               )}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <div style={{ display: "flex", gap: 8 }}>
                 {[
                   { label: "days", value: globalStats.days },
@@ -448,27 +543,56 @@
                   { label: "multi", value: globalStats.multiDays },
                 ].map((s, i) => (
                   <div key={i} style={{
-                    background: "white", borderRadius: 20, padding: "4px 12px",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-                    fontSize: 11, color: "#666", whiteSpace: "nowrap",
+                    background: theme.pillBg, borderRadius: 20, padding: "4px 12px",
+                    boxShadow: theme.pillShadow,
+                    fontSize: 11, color: theme.pillText, whiteSpace: "nowrap",
+                    transition: "background 0.2s",
                   }}>
                     <strong style={{ color: "#2979FF" }}>{s.value}</strong> {s.label}
                   </div>
                 ))}
               </div>
               <button onClick={() => fetchData(true)} style={{
-                background: "white", color: "#2979FF", border: "1px solid #E3E8FF",
+                background: theme.refreshBg, color: theme.refreshText, border: `1px solid ${theme.refreshBorder}`,
                 borderRadius: 8, padding: "6px 14px", fontSize: 12,
-                fontWeight: 600, cursor: "pointer",
+                fontWeight: 600, cursor: "pointer", transition: "background 0.2s",
               }}>↻ Refresh</button>
+
+              {/* Dark mode toggle */}
+              <button
+                onClick={() => setDarkMode(d => !d)}
+                title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+                style={{
+                  width: 44, height: 26, flexShrink: 0,
+                  background: darkMode ? "#2979FF" : "#D1D1D6",
+                  border: "none", borderRadius: 13,
+                  cursor: "pointer", position: "relative",
+                  transition: "background 0.25s",
+                }}
+              >
+                <div style={{
+                  position: "absolute",
+                  top: 3,
+                  left: darkMode ? 21 : 3,
+                  width: 20, height: 20,
+                  borderRadius: "50%",
+                  background: "white",
+                  transition: "left 0.25s",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 11,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                }}>
+                  {darkMode ? "🌙" : "☀️"}
+                </div>
+              </button>
             </div>
           </div>
 
           {/* Time filter */}
           <div style={{
-            display: "inline-flex", background: "white", borderRadius: 10,
-            padding: 3, boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-            marginBottom: 16,
+            display: "inline-flex", background: theme.filterBarBg, borderRadius: 10,
+            padding: 3, boxShadow: theme.pillShadow,
+            marginBottom: 16, transition: "background 0.2s",
           }}>
             {TIME_FILTERS.map(f => (
               <button key={f.value} onClick={() => { setTimeFilter(f.value); setSelectedKey(null); }}
@@ -476,7 +600,7 @@
                   padding: "7px 16px", fontSize: 12, fontWeight: 600,
                   border: "none", borderRadius: 8, cursor: "pointer",
                   background: timeFilter === f.value ? "#2979FF" : "transparent",
-                  color: timeFilter === f.value ? "white" : "#888",
+                  color: timeFilter === f.value ? "white" : theme.inactiveFilterText,
                   transition: "all 0.15s ease",
                   whiteSpace: "nowrap",
                 }}>
@@ -485,30 +609,40 @@
             ))}
           </div>
 
-          {/* Legend */}
+          {/* Legend / exercise filters */}
           {allLegendEmojis.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20 }}>
               {allLegendEmojis.map(emoji => {
                 const c = TYPE_COLORS[emoji];
+                const isActive = exerciseFilters.has(emoji);
                 return (
-                  <div key={emoji} style={{
+                  <div key={emoji} onClick={() => toggleExerciseFilter(emoji)} style={{
                     display: "flex", alignItems: "center", gap: 5,
                     padding: "3px 10px 3px 5px",
-                    background: "white", borderRadius: 20,
-                    border: `1px solid ${c.border}40`, fontSize: 11,
+                    background: isActive ? c.bg : theme.legendBg,
+                    borderRadius: 20,
+                    border: `1.5px solid ${isActive ? c.border : c.border + "40"}`,
+                    fontSize: 11,
+                    cursor: "pointer",
+                    boxShadow: isActive ? `0 0 0 2px ${c.border}30` : "none",
+                    transition: "background 0.15s, border 0.15s, box-shadow 0.15s",
+                    userSelect: "none",
                   }}>
                     <span style={{ fontSize: 13 }}>{emoji}</span>
-                    <span style={{ fontWeight: 500, color: "#666" }}>{c.label}</span>
+                    <span style={{
+                      fontWeight: isActive ? 700 : 500,
+                      color: isActive ? c.border : theme.legendText,
+                    }}>{c.label}</span>
                   </div>
                 );
               })}
             </div>
           )}
 
-          {/* Month grid: auto-fill responsive */}
+          {/* Month grid */}
           {filteredMonths.length === 0 ? (
             <div style={{
-              textAlign: "center", padding: "48px 24px", color: "#999", fontSize: 14,
+              textAlign: "center", padding: "48px 24px", color: theme.emptyStateText, fontSize: 14,
             }}>
               No workouts in this time range. Try a wider filter.
             </div>
@@ -526,6 +660,8 @@
                 rawData={rawData}
                 selectedKey={selectedKey}
                 onSelect={setSelectedKey}
+                theme={theme}
+                exerciseFilters={exerciseFilters}
               />
             ))}
           </div>
