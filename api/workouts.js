@@ -116,7 +116,8 @@ export default async function handler(req, res) {
     // Step 3: Parse CSV → workouts by date
     const records = parseCSV(csvText);
 
-    const workoutsByDate = {};
+    // sessions: date → Map of "title\0startTime" → title
+    const sessionsByDate = {};
     for (const row of records) {
       const title = row.title;
       const startTime = row.start_time;
@@ -126,16 +127,17 @@ export default async function handler(req, res) {
       if (!dt) continue;
 
       const dateKey = formatDateKey(dt);
-      if (!workoutsByDate[dateKey]) {
-        workoutsByDate[dateKey] = new Set();
+      if (!sessionsByDate[dateKey]) {
+        sessionsByDate[dateKey] = new Map();
       }
-      workoutsByDate[dateKey].add(title);
+      const sessionKey = `${title}\0${startTime}`;
+      sessionsByDate[dateKey].set(sessionKey, title);
     }
 
-    // Convert Sets to arrays
+    // Convert Maps to arrays of titles (one entry per unique session)
     const result = {};
-    for (const [date, titles] of Object.entries(workoutsByDate)) {
-      result[date] = [...titles];
+    for (const [date, sessions] of Object.entries(sessionsByDate)) {
+      result[date] = [...sessions.values()];
     }
 
     const payload = {
