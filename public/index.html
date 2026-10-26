@@ -6,7 +6,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#F5F6F8" id="themeColorMeta" />
   <title>Workout Calendar</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" id="faviconLink">
+  <script>
+    // Base path the app is served under: "" at the root, "/hevy" when proxied at bcr.co/hevy
+    window.APP_BASE = location.pathname.replace(/\/(index\.html)?$/, "");
+    document.getElementById("faviconLink").href = window.APP_BASE + "/favicon.svg";
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
@@ -441,7 +446,7 @@
         setLoading(true);
         setError(null);
         try {
-          const url = refresh ? "/api/workouts?refresh=true" : "/api/workouts";
+          const url = window.APP_BASE + (refresh ? "/api/workouts?refresh=true" : "/api/workouts");
           const res = await fetch(url);
           if (!res.ok) {
             const body = await res.json().catch(() => ({}));
