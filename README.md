@@ -86,6 +86,16 @@ Set environment variables in a `.env` file (see `.env.example`).
 3. Drop CSV in your Google Drive folder
 4. Visit your calendar — it picks up the latest file automatically
 
+## Favicon and link preview
+
+The `.ico`, iPhone icon and `og.png` preview card are rendered from `brand/icon.svg` and `brand/og.html`
+(`public/favicon.svg` is the hand-drawn original and is kept as is):
+
+```bash
+python3 ~/.claude/skills/favicon-og/render.py build --icon brand/icon.svg --og brand/og.html --bg '#1E6FE0' --out public
+git checkout public/favicon.svg
+```
+
 ## License
 
 MIT
