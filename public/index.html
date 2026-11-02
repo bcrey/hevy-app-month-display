@@ -381,7 +381,7 @@
             borderTopColor: "#2979FF", borderRadius: "50%",
             animation: "spin 0.8s linear infinite",
           }} />
-          <div style={{ fontSize: 14, color: theme.metaColor }}>Loading workouts from Drive...</div>
+          <div style={{ fontSize: 14, color: theme.metaColor }}>Loading workouts...</div>
         </div>
       );
     }
@@ -533,7 +533,9 @@
               </h1>
               {meta && (
                 <div style={{ fontSize: 11, color: theme.metaColor, marginTop: 2 }}>
-                  {meta.fileName} · uploaded {new Date(meta.fileDate).toLocaleDateString()}
+                  {meta.source === "hevy"
+                    ? `Synced from Hevy · ${new Date(meta.fetchedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
+                    : `${meta.fileName} · uploaded ${new Date(meta.fileDate).toLocaleDateString()}`}
                 </div>
               )}
             </div>

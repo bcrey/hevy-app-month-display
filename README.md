@@ -20,6 +20,10 @@ Browser  →  Vercel Serverless Function  →  Google Drive API
 2. The serverless function finds the newest CSV in that folder, parses it, and returns structured JSON
 3. The frontend renders a responsive multi-month calendar with emoji indicators per workout
 
+## Data source
+
+If `HEVY_API_KEY` is set, the function reads workouts straight from the [Hevy API](https://api.hevyapp.com/docs/) (requires Hevy Pro; create a key at [hevy.com/settings?developer](https://hevy.com/settings?developer)) and no export is needed. Without it, it falls back to the newest CSV export in a Google Drive folder, described below.
+
 ## Deploy to Vercel
 
 ### Prerequisites
